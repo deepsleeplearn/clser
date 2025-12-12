@@ -1,6 +1,6 @@
 ## 准备工作
 ```shell
-cd midea-cls-tool && pip install -e .
+cd clser && pip install -e .
 ```
 
 ## 输入数据说明
