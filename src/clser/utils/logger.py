@@ -39,7 +39,7 @@ class ColoredFormatter(logging.Formatter):
         reset = COLORS["RESET"]
         record.levelname = f"{color}{record.levelname}{reset}"
         if getattr(record, "author", None) is None:
-            author = "midea"
+            author = "guojian"
         else:
             author = record.author
         record.author = f"\033[31m{author}{reset}"

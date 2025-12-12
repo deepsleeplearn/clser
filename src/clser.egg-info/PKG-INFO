@@ -1,0 +1,65 @@
+Metadata-Version: 2.4
+Name: clser
+Version: 0.1.0
+Summary: deal with classify task
+Author: guojian
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: transformers>=4.55
+
+## 准备工作
+```shell
+cd midea-cls-tool && pip install -e .
+```
+
+## 输入数据说明
+### 两种模式
+#### 对话模式
+输入数据为对话形式
+##### 格式1
+|      键名    |    类型 |  说明   | 示例 |
+|:-----------:|:----------:|:-------:|:-----:|
+|system|str|系统提示词|你是一个实用小助手|
+|conversations|list[str]|交替的以"用户"、"客服"开头的对话内容|["用户: 你好", "客服: 您好，很高兴为您服务，请问是美的冰箱需要维修吗？", "用户: 是的，冰箱不制冷"]|
+|labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
+
+##### 格式2
+|      键名    |    类型 |  说明   | 示例 |
+|:-----------:|:----------:|:-------:|:-----:|
+|system|str|系统提示词|你是一个实用小助手|
+|conversations|dict[str, Any]|交替的以"用户"、"客服"开头的对话内容，对话格式为有键role、content的dict|[{"role": "user", "content": 你好"}, {"role": "assistant", "content": "您好，很高兴为您服务，请问是美的冰箱需要维修吗？"}, {"role": "user", "content": "是的，冰箱不制冷"}]|
+|labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
+
+#### 文本模式
+##### 格式3
+|      键名    |    类型 |  说明   | 示例 |
+|:-----------:|:----------:|:-------:|:-----:|
+|system|str|系统提示词|你是一个实用小助手|
+|text|str|主体文本|"用户：你好。\n客服：您好，很高兴为您服务，请问是美的冰箱需要维修吗？\n用户：是的，冰箱不制冷"|
+|labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
+
+##### 格式4
+|      键名    |    类型 |  说明   | 示例 |
+|:-----------:|:----------:|:-------:|:-----:|
+|system|str|系统提示词|你是一个实用小助手|
+|text|str|主体文本|["用户：你好。", "客服：您好，很高兴为您服务，请问是美的冰箱需要维修吗？", "用户：是的，冰箱不制冷"]|
+|labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
+
+### 说明
+1. 标签名可以不强制labels，但是要在 **args.yaml** 中设置标签名与数据中一致；
+2. 格式 1 中，system、conversations使用换行符"\n"进行join；而格式 4 中，system、text直接使用""进行join；
+
+
+## 运行脚本
+
+### multi_args.yaml
+#### 路径
+midea-cls-tool/example/multi_args.yaml
+#### 说明
+这里设置一下训练配置
+
+### multi_run.sh
+#### 路径
+midea-cls-tool/tests/multi_run.sh
+直接bash 该shell文件
