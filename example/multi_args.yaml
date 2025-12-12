@@ -1,0 +1,53 @@
+#data_args
+train_file_path: "/data/private/customer_aigc/GJ/cls/data/1205/train.jsonl"
+valid_file_path: "/data/private/customer_aigc/GJ/cls/data/1205/self_define_valid.jsonl"
+test_file_path: null
+num_processing: 16
+train_remove_columns: ["unique_id", "conversations", "state"]
+valid_remove_columns: ["unique_id", "conversations", "state"]
+max_length_threshold: 1024
+label_key: "state"
+
+
+# model_args
+# model_name_or_path: "/data/private/customer_aigc/GJ/cls/output/output1203_v4/checkpoint-460"
+model_name_or_path: "/data/team/llm/Qwen3-1.7B"
+multi_classes: ["正常", "转人工", "投诉", "危机", "退换机请求", "正常结束", "抽取品牌品类", "抽取机型", "抽取姓氏", "键入电话", "诉求分类", "小结+录单", "满意度调查", "自主填单链接", "不满意原因链接", "预约时间通知"]
+
+
+# train_args
+output_dir: "../../output/output1212/"
+overwrite_output_dir: true
+do_train: true
+do_eval: true
+eval_strategy: "steps"
+eval_steps: 20
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 8
+num_train_epochs: 2 # 增量训练用1
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.05
+save_strategy: "steps"
+save_steps: 20
+save_total_limit: 4
+# load_best_model_at_end: true
+metric_for_best_model: "loss"
+optim: "adamw_torch"
+report_to: "none"
+dataloader_pin_memory: true
+remove_unused_columns: false
+fsdp: "auto_wrap"
+fsdp_config:
+  state_dict_type: "FULL_STATE_DICT"
+  # activation_checkpointing: true
+bf16: true
+log_level: "info"
+logging_steps: 20
+logging_dir: "./log/"
+learning_rate: 0.0001
+measures: ["accuracy", "f1", "recall", "precision"]
+save_only_model: true
+# gradient_checkpointing: true
+attn_implementation: "flash_attention_2"
+# shuffle_seed: 1108

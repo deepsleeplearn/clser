@@ -1,0 +1,49 @@
+#data_args
+train_file_path: "/data/private/customer_aigc/GJ/multi-class/data/single_label_data/train.jsonl"
+valid_file_path: "/data/private/customer_aigc/GJ/multi-class/data/single_label_data/valid.jsonl"
+test_file_path: null
+num_processing: 16
+train_remove_columns: ["text"]
+valid_remove_columns: ["text"]
+max_length_threshold: 128
+label_key: "label"
+
+
+# model_args
+model_name_or_path: "/data/team/llm/Qwen3-1.7B"
+multi_classes: ["Bearish", "Bullish", "Neutral"]
+
+
+# train_args
+output_dir: "../output_single/"
+overwrite_output_dir: true
+do_train: true
+do_eval: true
+eval_strategy: "steps"
+eval_steps: 10
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 4
+num_train_epochs: 2
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.05
+save_strategy: "steps"
+save_steps: 20
+save_total_limit: 2
+# load_best_model_at_end: true
+metric_for_best_model: "loss"
+optim: "adamw_torch"
+report_to: "none"
+dataloader_pin_memory: true
+remove_unused_columns: false
+fsdp: "full_shard"
+log_level: "info"
+logging_steps: 10
+logging_dir: "./log/"
+learning_rate: 0.0001
+measures: ["f1", "recall", "precision", "accuracy"]
+save_only_model: true
+attn_implementation: "flash_attention_2"
+
+# infer_args
+problem_type: "single_label_classification"
