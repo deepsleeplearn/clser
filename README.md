@@ -11,14 +11,14 @@ cd clser && pip install -e .
 |      键名    |    类型 |  说明   | 示例 |
 |:-----------:|:----------:|:-------:|:-----:|
 |system|str|系统提示词|你是一个实用小助手|
-|conversations|list[str]|交替的以"用户"、"客服"开头的对话内容|["用户: 你好", "客服: 您好，很高兴为您服务，请问是美的冰箱需要维修吗？", "用户: 是的，冰箱不制冷"]|
+|conversations|list[str]|交替的以"用户"、"客服"开头的对话内容|["用户: 你好", "客服: 您好，很高兴为您服务，请问是冰箱需要维修吗？", "用户: 是的，冰箱不制冷"]|
 |labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
 
 ##### 格式2
 |      键名    |    类型 |  说明   | 示例 |
 |:-----------:|:----------:|:-------:|:-----:|
 |system|str|系统提示词|你是一个实用小助手|
-|conversations|dict[str, Any]|交替的以"用户"、"客服"开头的对话内容，对话格式为有键role、content的dict|[{"role": "user", "content": 你好"}, {"role": "assistant", "content": "您好，很高兴为您服务，请问是美的冰箱需要维修吗？"}, {"role": "user", "content": "是的，冰箱不制冷"}]|
+|conversations|dict[str, Any]|交替的以"用户"、"客服"开头的对话内容，对话格式为有键role、content的dict|[{"role": "user", "content": 你好"}, {"role": "assistant", "content": "您好，很高兴为您服务，请问是冰箱需要维修吗？"}, {"role": "user", "content": "是的，冰箱不制冷"}]|
 |labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
 
 #### 文本模式
@@ -26,14 +26,14 @@ cd clser && pip install -e .
 |      键名    |    类型 |  说明   | 示例 |
 |:-----------:|:----------:|:-------:|:-----:|
 |system|str|系统提示词|你是一个实用小助手|
-|text|str|主体文本|"用户：你好。\n客服：您好，很高兴为您服务，请问是美的冰箱需要维修吗？\n用户：是的，冰箱不制冷"|
+|text|str|主体文本|"用户：你好。\n客服：您好，很高兴为您服务，请问是冰箱需要维修吗？\n用户：是的，冰箱不制冷"|
 |labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
 
 ##### 格式4
 |      键名    |    类型 |  说明   | 示例 |
 |:-----------:|:----------:|:-------:|:-----:|
 |system|str|系统提示词|你是一个实用小助手|
-|text|str|主体文本|["用户：你好。", "客服：您好，很高兴为您服务，请问是美的冰箱需要维修吗？", "用户：是的，冰箱不制冷"]|
+|text|str|主体文本|["用户：你好。", "客服：您好，很高兴为您服务，请问是冰箱需要维修吗？", "用户：是的，冰箱不制冷"]|
 |labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
 
 ### 说明
@@ -45,11 +45,11 @@ cd clser && pip install -e .
 
 ### multi_args.yaml
 #### 路径
-midea-cls-tool/example/multi_args.yaml
+clser/example/multi_args.yaml
 #### 说明
 这里设置一下训练配置
 
 ### multi_run.sh
 #### 路径
-midea-cls-tool/tests/multi_run.sh
+clser/tests/multi_run.sh
 直接bash 该shell文件
