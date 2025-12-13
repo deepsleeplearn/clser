@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # @Time : 2025-12-12
-# @Author : guojian
+# @Author : GJason
 # @File : tools.py
 
 import logging
@@ -39,7 +39,7 @@ class ColoredFormatter(logging.Formatter):
         reset = COLORS["RESET"]
         record.levelname = f"{color}{record.levelname}{reset}"
         if getattr(record, "author", None) is None:
-            author = "guojian"
+            author = "GJason"
         else:
             author = record.author
         record.author = f"\033[31m{author}{reset}"
