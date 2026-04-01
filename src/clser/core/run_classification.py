@@ -21,6 +21,7 @@ from transformers import (
     Trainer,
     HfArgumentParser,
     default_data_collator,
+    DataCollatorWithPadding,
     set_seed
 )
 from transformers.trainer_utils import get_last_checkpoint
@@ -66,12 +67,11 @@ def print_rank0(info):
         logger.info(info)
 
 
-def get_dataset(
-    data_args: "MultiClassificationDataArguments",
-    train_args: "MultiClassificationTrainArguments", 
-    model_args: "MultiClassificationModelArguments",
-    tokenizer: "AutoTokenizer"
-):
+def get_dataset(data_args: "MultiClassificationDataArguments", 
+                train_args: "MultiClassificationTrainArguments", 
+                model_args: "MultiClassificationModelArguments", 
+                tokenizer: "AutoTokenizer"
+                ):
     
     mlb = MultiLabelBinarizer(classes=model_args.multi_classes)
     mlb.fit([model_args.multi_classes])
@@ -120,16 +120,17 @@ def get_dataset(
 
                 if "system" in example:
                     system = example["system"]
+                elif data_args.system_prompt:
+                    system = data_args.system_promt
                 else:
-                    system = "你是一个实用小助手,我需要你根据用户和客服的对话数据上下文帮我判断用户所说的最后一句话对应的状态。对话内容如下:\n"
+                    raise ValueError("You must provide system prompt.")
                 
                 main_text += system
 
                 if "conversations" in example and "text" not in example:
+                    assert isinstance(conversations, list), "conversations must be a list"
                     conversations = example["conversations"]
                     l = len(conversations)
-                    assert isinstance(conversations, list), "conversations must be a list"
-                    
                     if isinstance(conversations[0], str):
                         main_text += "\n".join(conversations)
                     elif isinstance(conversations[0], dict):
@@ -138,16 +139,13 @@ def get_dataset(
                         for idx, conv in enumerate(conversations):
                             role, content = conv["role"], conv["content"]
                             assert role in ["user", "assistant"], "role must be 'user' or 'assistant'"
-                            if data_args.task_name == "state_model":
-                                assert role == "user" if idx % 2 == 0 else role == "assistant"
                             convert_role = "用户" if role == "user" else "客服"
                             if idx != (l - 1):
-                                main_text += f"{convert_role}:{content}\n"
+                                main_text += f"{convert_role}: {content}\n"
                             else:
-                                main_text += f"{convert_role}:{content}"
+                                main_text += f"{convert_role}: {content}"
                     else:
-                        raise ValueError(f"Unknown example type: {example}")
-                        
+                        raise ValueError(f"Elements' type in conversations must be string or list.")
                 elif "text" in example and "conversations" not in example:
                     text = example["text"]
                     if isinstance(text, str):
@@ -160,18 +158,18 @@ def get_dataset(
                     raise ValueError(
                         "input must be a dictionary with a key 'text' or 'conversations'"
                     )
-                        
-                full_text_tokens = tokenizer.encode(main_text, add_special_tokens=True)
 
-                if len(full_text_tokens) > data_args.max_length_threshold:
-                    example["skip"] = True
-                else:
-                    example["skip"] = False
+                # full_text_tokens = tokenizer.encode(main_text, add_special_tokens=True)
+
+                # if len(full_text_tokens) > data_args.max_length_threshold:
+                #     example["skip"] = True
+                # else:
+                #     example["skip"] = False
 
                 result = tokenizer(
                     main_text, 
-                    padding="max_length", 
-                    max_length=data_args.max_length_threshold,
+                    # padding="max_length", 
+                    # max_length=data_args.max_length_threshold,
                     return_tensors='pt'
                 )
                 
@@ -375,12 +373,22 @@ def run_classification():
         preprocess_logits_for_metrics = None
     else:
         raise ValueError(f"不支持的problem_type: {train_args.problem_type}")
+    
+    if data_args.use_dcwp:
+        data_collator = DataCollatorWithPadding(
+            tokenizer=tokenizer,
+            padding=True,
+            pad_to_multiple_of=data_args.pad_to_multiple_of,
+            return_tensors="pt"
+        )
+    else:
+        data_collator = default_data_collator
 
     trainer = Trainer(
         model=model,
         args=train_args,
         compute_metrics=compute_metrics,
-        data_collator=default_data_collator,
+        data_collator=data_collator,
         processing_class=tokenizer,
         train_dataset=train_datasets,
         eval_dataset=valid_datasets, 

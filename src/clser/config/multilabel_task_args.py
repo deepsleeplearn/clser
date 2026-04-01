@@ -32,10 +32,24 @@ class MultiClassificationDataArguments:
         },
     )
     
-    task_name: str = field(
-        default="state_model", 
+    system_prompt: str = field(
+        default="You are useful assistant.", 
         metadata={
-            "help": "The name of the task."
+            "help": "System prompt."
+        },
+    )
+
+    use_dcwp: bool = field(
+        default=True, 
+        metadata={
+            "help": "Whether use data collate with pad."
+        },
+    )
+
+    pad_to_multiple_of: int = field(
+        default=None,
+        metadata={
+            "help": "The multiple number to pad."
         },
     )
 
