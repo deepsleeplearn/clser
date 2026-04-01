@@ -234,7 +234,6 @@ def get_dataset(data_args: "MultiClassificationDataArguments",
 
         train_shape = np.array(train_datasets["label"]).shape
         print_rank0(f"训练集标签维度: {train_shape}") 
-        print_rank0(f"训练集input_ids维度: {np.array(train_datasets['input_ids']).shape}")
 
         return train_datasets, valid_datasets
 
@@ -382,19 +381,19 @@ def run_classification():
     else:
         data_collator = default_data_collator
 
-    trainer = Trainer(
-        model_init=model,
-        args=train_args,
-        compute_metrics=compute_metrics,
-        data_collator=data_collator,
-        processing_class=tokenizer,
-        train_dataset=train_datasets,
-        eval_dataset=valid_datasets, 
-        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-    )
-
 
     if not train_args.use_hyperparameter_search:
+
+        trainer = Trainer(
+            model=model,
+            args=train_args,
+            compute_metrics=compute_metrics,
+            data_collator=data_collator,
+            processing_class=tokenizer,
+            train_dataset=train_datasets,
+            eval_dataset=valid_datasets, 
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        )
 
         last_checkpoint = None
         if os.path.isdir(train_args.output_dir) and train_args.do_train and not train_args.overwrite_output_dir:
@@ -444,6 +443,20 @@ def run_classification():
                 except Exception as e:
                     logger.warning(f"清理过程中出现警告: {e}")
     else:
+
+        def model_init(trial=None):
+            return model
+
+        trainer = Trainer(
+            model_init=model_init,
+            args=train_args,
+            compute_metrics=compute_metrics,
+            data_collator=data_collator,
+            processing_class=tokenizer,
+            train_dataset=train_datasets,
+            eval_dataset=valid_datasets, 
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        )
         print_rank0(f"开始超参搜索: n_trials={train_args.hp_n_trials}, backend={train_args.hp_search_backend}")
         
         def hp_space(trial):
