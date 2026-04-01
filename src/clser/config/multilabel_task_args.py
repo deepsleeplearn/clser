@@ -213,7 +213,7 @@ class MultiClassificationTrainArguments(TrainingArguments):
                     assert item in origin_dict, f"Hyperparameter search config file must contains {must_provide}."
                     setattr(self, item, origin_dict[item])
                 
-                hp_dict = {k, v for k, v in origin_dict.items() if k not in must_provide}
+                hp_dict = {k: v for k, v in origin_dict.items() if k not in must_provide}
                 setattr(self, "hp_dict", hp_dict)
                 
                     

@@ -466,17 +466,17 @@ def run_classification():
                     "learning_rate", float(train_args.hp_dict["lr"]["hp_lr_min"]), float(train_args.hp_dict["lr"]["hp_lr_max"]), log=True
                     )
             if "per_device_train_batch_size" in train_args.hp_dict:
-                assert isinstance(hp_dict["per_device_train_batch_size"], list), "Batch size just support specified num."
+                assert isinstance(train_args.hp_dict["per_device_train_batch_size"], list), "Batch size just support specified num."
                 return_dict["per_device_train_batch_size"] = trial.suggest_categorical(
                         "per_device_train_batch_size", train_args.hp_dict["per_device_train_batch_size"]
                     )
             if "warmup_ratio" in train_args.hp_dict:
                 return_dict["warmup_ratio"] = trial.suggest_float(
-                        "warmup_ratio", float(train_args.hp_dict["warmup_ratio"]["warmup_ratio_min"]), float(train_args.hp_dict["warmup_ratio"]["warmup_ratio_max"])
+                        "warmup_ratio", float(train_args.hp_dict["warmup_ratio"]["hp_warmup_ratio_min"]), float(train_args.hp_dict["warmup_ratio"]["hp_warmup_ratio_max"])
                     )
             if "weight_decay" in train_args.hp_dict:
                 return_dict["weight_decay"] = trial.suggest_float(
-                        "weight_decay", float(train_args.hp_dict["weight_decay"]["weight_decay_min"]), float(train_args.hp_dict["weight_decay"]["weight_decay_max"])
+                        "weight_decay", float(train_args.hp_dict["weight_decay"]["hp_weight_decay_min"]), float(train_args.hp_dict["weight_decay"]["hp_weight_decay_max"])
                     )
             return return_dict
         
