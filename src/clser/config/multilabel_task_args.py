@@ -186,7 +186,7 @@ class MultiClassificationTrainArguments(TrainingArguments):
     )
 
     hyperparameter_config_path: str = field(
-        default=None,
+        default="./hp.yaml",
         metadata={
             "help": "The config path of hyperparameter search."
         }
@@ -203,7 +203,7 @@ class MultiClassificationTrainArguments(TrainingArguments):
             raise ValueError(f"measures must be unique, but got {self.measures}")
         
         if self.use_hyperparameter_search:
-            if self.hyperparameter_config_path is None or not os.path.exists(self.hyperparameter_config_path):
+            if not os.path.exists(self.hyperparameter_config_path):
                 raise ValueError("You have specified use_hyperparameter_search=True, you must provide hyperparameter config path.")
             else:
                 with open(self.hyperparameter_config_path, mode="r", encoding="utf-8") as hp:
