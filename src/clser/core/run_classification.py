@@ -264,6 +264,7 @@ def get_model(config: "AutoConfig",
     except Exception as e:
         logger.error(f"加载模型失败: {e}")
         raise
+        
 
 
 def get_args(args_file: str):
@@ -357,8 +358,7 @@ def run_classification():
     config_dict = config.to_dict()
     config_str = json.dumps(config_dict, indent=2, ensure_ascii=False)
     print_rank0(f"模型配置:\n{config_str}")
-    
-    model = get_model(config, model_args, local_rank)
+
 
     if train_args.problem_type == "multi_label_classification":
         compute_metrics = compute_metrics_multi
@@ -383,6 +383,7 @@ def run_classification():
 
 
     if not train_args.use_hyperparameter_search:
+        model = get_model(config, model_args, local_rank)
 
         trainer = Trainer(
             model=model,
@@ -445,6 +446,11 @@ def run_classification():
     else:
 
         def model_init(trial=None):
+            model = Qwen3ForSequenceClassification.from_pretrained(
+                model_args.model_name_or_path,
+                config=config,
+                dtype=torch.bfloat16,
+            )
             return model
 
         trainer = Trainer(
