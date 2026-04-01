@@ -121,15 +121,15 @@ def get_dataset(data_args: "MultiClassificationDataArguments",
                 if "system" in example:
                     system = example["system"]
                 elif data_args.system_prompt:
-                    system = data_args.system_promt
+                    system = data_args.system_prompt
                 else:
                     raise ValueError("You must provide system prompt.")
                 
                 main_text += system
 
                 if "conversations" in example and "text" not in example:
-                    assert isinstance(conversations, list), "conversations must be a list"
                     conversations = example["conversations"]
+                    assert isinstance(conversations, list), "conversations must be a list"
                     l = len(conversations)
                     if isinstance(conversations[0], str):
                         main_text += "\n".join(conversations)
@@ -159,17 +159,15 @@ def get_dataset(data_args: "MultiClassificationDataArguments",
                         "input must be a dictionary with a key 'text' or 'conversations'"
                     )
 
-                # full_text_tokens = tokenizer.encode(main_text, add_special_tokens=True)
+                full_text_tokens = tokenizer.encode(main_text, add_special_tokens=True)
 
-                # if len(full_text_tokens) > data_args.max_length_threshold:
-                #     example["skip"] = True
-                # else:
-                #     example["skip"] = False
+                if len(full_text_tokens) > data_args.max_length_threshold:
+                    example["skip"] = True
+                else:
+                    example["skip"] = False
 
                 result = tokenizer(
                     main_text, 
-                    # padding="max_length", 
-                    # max_length=data_args.max_length_threshold,
                     return_tensors='pt'
                 )
                 
@@ -184,7 +182,7 @@ def get_dataset(data_args: "MultiClassificationDataArguments",
                     raise ValueError("label_key must be list or str")
                 
                 if train_args.problem_type == "multi_label_classification":
-                    result["label"] = hot_encode
+                    result["label"] = hot_encode.astype(np.float32).tolist()
                 elif train_args.problem_type == "single_label_classification":
                     result["label"] = np.argmax(hot_encode)
                 else:
@@ -385,7 +383,7 @@ def run_classification():
         data_collator = default_data_collator
 
     trainer = Trainer(
-        model=model,
+        model_init=model,
         args=train_args,
         compute_metrics=compute_metrics,
         data_collator=data_collator,
@@ -395,50 +393,117 @@ def run_classification():
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
 
-    last_checkpoint = None
-    if os.path.isdir(train_args.output_dir) and train_args.do_train and not train_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(train_args.output_dir)
-        if last_checkpoint is not None:
-            print_rank0(f"发现checkpoint: {last_checkpoint}")
-    
-    checkpoint = None
-    if train_args.resume_from_checkpoint is not None:
-        checkpoint = train_args.resume_from_checkpoint
-        print_rank0(f"从指定checkpoint恢复: {checkpoint}")
-    elif last_checkpoint is not None:
-        checkpoint = last_checkpoint
-        print_rank0(f"从最新checkpoint恢复: {checkpoint}")
-    
-    try:
-        print_rank0("=" * 50)
-        print_rank0("开始训练")
-        print_rank0("=" * 50)
-        
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        print_rank0(train_result)
 
-        metrics = train_result.metrics
-        metrics["train_samples"] = len(train_datasets)
+    if not train_args.use_hyperparameter_search:
+
+        last_checkpoint = None
+        if os.path.isdir(train_args.output_dir) and train_args.do_train and not train_args.overwrite_output_dir:
+            last_checkpoint = get_last_checkpoint(train_args.output_dir)
+            if last_checkpoint is not None:
+                print_rank0(f"发现checkpoint: {last_checkpoint}")
         
-        trainer.save_model()
-        trainer.log_metrics("train", metrics)
-        trainer.save_metrics("train", metrics)
-        trainer.save_state()
+        checkpoint = None
+        if train_args.resume_from_checkpoint is not None:
+            checkpoint = train_args.resume_from_checkpoint
+            print_rank0(f"从指定checkpoint恢复: {checkpoint}")
+        elif last_checkpoint is not None:
+            checkpoint = last_checkpoint
+            print_rank0(f"从最新checkpoint恢复: {checkpoint}")
+
+        try:
+            print_rank0("=" * 50)
+            print_rank0("开始训练")
+            print_rank0("=" * 50)
+            
+            train_result = trainer.train(resume_from_checkpoint=checkpoint)
+            print_rank0(train_result)
+
+            metrics = train_result.metrics
+            metrics["train_samples"] = len(train_datasets)
+            
+            trainer.save_model()
+            trainer.log_metrics("train", metrics)
+            trainer.save_metrics("train", metrics)
+            trainer.save_state()
+            
+            print_rank0("=" * 50)
+            print_rank0("训练完成")
+            print_rank0("=" * 50)
+            
+        except Exception as e:
+            logger.error(f"训练过程中出错: {e}")
+            raise
         
-        print_rank0("=" * 50)
-        print_rank0("训练完成")
-        print_rank0("=" * 50)
+        finally:
+            if dist.is_initialized():
+                try:
+                    print_rank0("清理分布式资源...")
+                    dist.barrier()
+                    dist.destroy_process_group()
+                    logger.info("清理完成")
+                except Exception as e:
+                    logger.warning(f"清理过程中出现警告: {e}")
+    else:
+        print_rank0(f"开始超参搜索: n_trials={train_args.hp_n_trials}, backend={train_args.hp_search_backend}")
         
-    except Exception as e:
-        logger.error(f"训练过程中出错: {e}")
-        raise
-    
-    finally:
-        if dist.is_initialized():
-            try:
-                print_rank0("清理分布式资源...")
-                dist.barrier()
-                dist.destroy_process_group()
-                logger.info("清理完成")
-            except Exception as e:
-                logger.warning(f"清理过程中出现警告: {e}")
+        def hp_space(trial):
+            return_dict = {}
+            if "lr" in train_args.hp_dict:
+                return_dict["learning_rate"] = trial.suggest_float(
+                    "learning_rate", float(train_args.hp_dict["lr"]["hp_lr_min"]), float(train_args.hp_dict["lr"]["hp_lr_max"]), log=True
+                    )
+            if "per_device_train_batch_size" in train_args.hp_dict:
+                assert isinstance(hp_dict["per_device_train_batch_size"], list), "Batch size just support specified num."
+                return_dict["per_device_train_batch_size"] = trial.suggest_categorical(
+                        "per_device_train_batch_size", train_args.hp_dict["per_device_train_batch_size"]
+                    )
+            if "warmup_ratio" in train_args.hp_dict:
+                return_dict["warmup_ratio"] = trial.suggest_float(
+                        "warmup_ratio", float(train_args.hp_dict["warmup_ratio"]["warmup_ratio_min"]), float(train_args.hp_dict["warmup_ratio"]["warmup_ratio_max"])
+                    )
+            if "weight_decay" in train_args.hp_dict:
+                return_dict["weight_decay"] = trial.suggest_float(
+                        "weight_decay", float(train_args.hp_dict["weight_decay"]["weight_decay_min"]), float(train_args.hp_dict["weight_decay"]["weight_decay_max"])
+                    )
+            return return_dict
+        
+        try:
+
+            best_run = trainer.hyperparameter_search(
+                direction=train_args.hp_direction,
+                backend=train_args.hp_search_backend,
+                hp_space=hp_space,
+                n_trials=train_args.hp_n_trials,
+                compute_objective=lambda metrics: metrics[train_args.hp_metric_for_best],
+            )
+
+            print_rank0(f"最优 trial: {best_run.run_id}")
+            print_rank0(f"最优超参: {best_run.hyperparameters}")
+            print_rank0(f"最优 {train_args.hp_metric_for_best}: {best_run.objective}")
+
+            print_rank0("用最优超参重新训练完整模型...")
+            for key, value in best_run.hyperparameters.items():
+                setattr(trainer.args, key, value)
+
+            trainer.train()
+            trainer.save_model()
+            trainer.save_state()
+
+            hp_save_path = os.path.join(train_args.output_dir, "best_hyperparameters.json")
+            with open(hp_save_path, "w") as f:
+                json.dump({
+                    "run_id": best_run.run_id,
+                    "objective": best_run.objective,
+                    "hyperparameters": best_run.hyperparameters,
+                }, f, indent=2, ensure_ascii=False)
+            print_rank0(f"最优超参已保存到 {hp_save_path}")
+        except Exception as e:
+            logger.error(f"训练过程中出错: {e}")
+            raise
+        finally:
+            if dist.is_initialized():
+                try:
+                    dist.barrier()
+                    dist.destroy_process_group()
+                except Exception as e:
+                    logger.warning(f"清理过程中出现警告: {e}")

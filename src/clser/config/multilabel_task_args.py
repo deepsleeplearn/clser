@@ -9,6 +9,7 @@ from typeguard import typechecked
 from typing import List, Optional, Literal
 from transformers import HfArgumentParser, TrainingArguments
 import os
+import yaml
 
 @typechecked
 @dataclass
@@ -171,11 +172,25 @@ class MultiClassificationTrainArguments(TrainingArguments):
         )
 
     attn_implementation: Literal["eager", "flash_attention_2", "sdpa"] = field(
-        default="flash_attention_2",
+        default="sdpa",
         metadata={
             "help": "The attention implementation to use."
             },
         )
+    
+    use_hyperparameter_search: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use hyperparameter search."
+        }
+    )
+
+    hyperparameter_config_path: str = field(
+        default=None,
+        metadata={
+            "help": "The config path of hyperparameter search."
+        }
+    )
     
     def __post_init__(self):
         super().__post_init__()
@@ -186,6 +201,22 @@ class MultiClassificationTrainArguments(TrainingArguments):
         
         if len(list(set(self.measures))) != len(self.measures):
             raise ValueError(f"measures must be unique, but got {self.measures}")
+        
+        if self.use_hyperparameter_search:
+            if self.hyperparameter_config_path is None or not os.path.exists(self.hyperparameter_config_path):
+                raise ValueError("You have specified use_hyperparameter_search=True, you must provide hyperparameter config path.")
+            else:
+                with open(self.hyperparameter_config_path, mode="r", encoding="utf-8") as hp:
+                    origin_dict = yaml.safe_load(hp)
+                must_provide = ["hp_search_backend", "hp_n_trials", "hp_direction", "hp_metric_for_best"]
+                for item in must_provide:
+                    assert item in origin_dict, f"Hyperparameter search config file must contains {must_provide}."
+                    setattr(self, item, origin_dict[item])
+                
+                hp_dict = {k, v for k, v in origin_dict.items() if k not in must_provide}
+                setattr(self, "hp_dict", hp_dict)
+                
+                    
 
 
 

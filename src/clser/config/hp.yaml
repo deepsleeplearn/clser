@@ -1,0 +1,18 @@
+hp_search_backend: optuna
+hp_n_trials: 20
+hp_direction: maximize
+hp_metric_for_best: eval_f1
+
+lr:
+  hp_lr_min: 1.0e-5
+  hp_lr_max: 5.0e-5
+
+per_device_train_batch_size: [4, 8, 16]
+
+warmup_ratio: 
+  hp_warmup_ratio_min: 0.0
+  hp_warmup_ratio_max: 0.2
+
+weight_decay: 
+  hp_weight_decay_min: 0.0
+  hp_weight_decay_max: 0.1
