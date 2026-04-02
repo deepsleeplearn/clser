@@ -10,14 +10,13 @@ label_key: "state"
 
 
 # model_args
-# model_name_or_path: "/data/private/customer_aigc/GJ/cls/output/output1203_v4/checkpoint-460"
 model_name_or_path: "/data/team/llm/Qwen3-1.7B"
 multi_classes: ["正常", "转人工", "投诉", "危机", "退换机请求", "正常结束", "抽取品牌品类", "抽取机型", "抽取姓氏", "键入电话", "诉求分类", "小结+录单", "满意度调查", "自主填单链接", "不满意原因链接", "预约时间通知"]
 system_prompt: "你是一个实用小助手，我需要你根据用户和客服的对话数据上下文帮我判断用户所说的最后一句话对应的状态。对话内容如下：\n"
 
 
 # train_args
-output_dir: "../../output/output0331/"
+output_dir: "../../output/"
 overwrite_output_dir: true
 do_train: true
 do_eval: true
@@ -41,7 +40,6 @@ remove_unused_columns: false
 fsdp: "auto_wrap"
 fsdp_config:
   state_dict_type: "FULL_STATE_DICT"
-  # activation_checkpointing: true
 bf16: true
 log_level: "info"
 logging_steps: 20
@@ -51,7 +49,6 @@ measures: ["accuracy", "f1", "recall", "precision"]
 save_only_model: true
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
-      use_reentrant: false
+  use_reentrant: false
 attn_implementation: "sdpa"
 use_hyperparameter_search: true
-# shuffle_seed: 1108
