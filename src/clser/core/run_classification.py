@@ -427,6 +427,17 @@ def run_classification():
             trainer.save_metrics("train", metrics)
             trainer.save_state()
             
+            final_eval_metrics = trainer.evaluate(eval_dataset=valid_datasets, metric_key_prefix="final_eval")
+            final_eval_metrics["final_eval_samples"] = len(valid_datasets)
+
+            trainer.log_metrics("final_eval", final_eval_metrics)
+            trainer.save_metrics("final_eval", final_eval_metrics)
+
+            print_rank0(f"最终评估结果: {final_eval_metrics}")
+            print_rank0("=" * 50)
+            print_rank0("最终评估完成")
+            print_rank0("=" * 50)
+            
             print_rank0("=" * 50)
             print_rank0("训练完成")
             print_rank0("=" * 50)
@@ -508,6 +519,16 @@ def run_classification():
             trainer.train()
             trainer.save_model()
             trainer.save_state()
+            final_eval_metrics = trainer.evaluate(eval_dataset=valid_datasets, metric_key_prefix="final_eval")
+            final_eval_metrics["final_eval_samples"] = len(valid_datasets)
+
+            trainer.log_metrics("final_eval", final_eval_metrics)
+            trainer.save_metrics("final_eval", final_eval_metrics)
+
+            print_rank0(f"最终评估结果: {final_eval_metrics}")
+            print_rank0("=" * 50)
+            print_rank0("最终评估完成")
+            print_rank0("=" * 50)
 
             hp_save_path = os.path.join(train_args.output_dir, "best_hyperparameters.json")
             with open(hp_save_path, "w") as f:
