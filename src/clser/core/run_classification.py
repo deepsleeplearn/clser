@@ -351,10 +351,11 @@ def run_classification():
     )
     config._attn_implementation = train_args.attn_implementation
     config.pad_token_id = tokenizer.pad_token_id
-    
-    
     config.id2label = {idx: label for idx, label in zip(range(model_args.num_labels), model_args.multi_classes)}
     config.label2id = {label: idx for idx, label in zip(range(model_args.num_labels), model_args.multi_classes)}
+    if hasattr(config, "use_cache"):
+        config.use_cache = False
+
     config_dict = config.to_dict()
     config_str = json.dumps(config_dict, indent=2, ensure_ascii=False)
     print_rank0(f"模型配置:\n{config_str}")

@@ -35,7 +35,7 @@ echo ""
 
 
 PARENT_DIR="$(dirname "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
-PYTHON_SCRIPT="${PARENT_DIR}/src/mideacls/__main__.py"
+PYTHON_SCRIPT="${PARENT_DIR}/src/clser/__main__.py"
 CONFIG_FILE="${PARENT_DIR}/example/single_args.yaml"
 
 if [ ! -f "$PYTHON_SCRIPT" ]; then

@@ -186,7 +186,7 @@ class MultiClassificationTrainArguments(TrainingArguments):
     )
 
     hyperparameter_config_path: str = field(
-        default="./hp.yaml",
+        default="./example/hp.yaml",
         metadata={
             "help": "The config path of hyperparameter search."
         }
