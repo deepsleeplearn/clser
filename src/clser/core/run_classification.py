@@ -355,6 +355,11 @@ def run_classification():
     config.label2id = {label: idx for idx, label in zip(range(model_args.num_labels), model_args.multi_classes)}
     if hasattr(config, "use_cache"):
         config.use_cache = False
+        print_rank0("已关闭 config.use_cache，用于降低分类训练显存占用。")
+    if train_args.gradient_checkpointing:
+        print_rank0(
+            f"已启用 gradient checkpointing, kwargs={train_args.gradient_checkpointing_kwargs}"
+        )
 
     config_dict = config.to_dict()
     config_str = json.dumps(config_dict, indent=2, ensure_ascii=False)
@@ -364,7 +369,7 @@ def run_classification():
     if train_args.problem_type == "multi_label_classification":
         compute_metrics = compute_metrics_multi
         def custom_preprocess(logits, labels):
-            return torch.sigmoid(logits)
+            return torch.sigmoid(logits).detach()
         preprocess_logits_for_metrics = custom_preprocess
     elif train_args.problem_type == "single_label_classification":
         compute_metrics = compute_metrics_single
@@ -381,6 +386,38 @@ def run_classification():
         )
     else:
         data_collator = default_data_collator
+
+    def log_and_save_train_metrics(trainer: Trainer, train_result):
+        metrics = train_result.metrics
+        metrics["train_samples"] = len(train_datasets)
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        return metrics
+
+    def run_final_evaluation(trainer: Trainer):
+        if not train_args.do_eval:
+            print_rank0("跳过最终评估: do_eval=False")
+            return None
+
+        final_eval_metrics = trainer.evaluate(eval_dataset=valid_datasets, metric_key_prefix="final_eval")
+        final_eval_metrics["final_eval_samples"] = len(valid_datasets)
+
+        trainer.log_metrics("final_eval", final_eval_metrics)
+        trainer.save_metrics("final_eval", final_eval_metrics)
+
+        print_rank0(f"最终评估结果: {final_eval_metrics}")
+        print_rank0("=" * 50)
+        print_rank0("最终评估完成")
+        print_rank0("=" * 50)
+        return final_eval_metrics
+
+    def broadcast_from_rank0(obj):
+        if not dist.is_initialized():
+            return obj
+
+        shared_obj = [obj if dist.get_rank() == 0 else None]
+        dist.broadcast_object_list(shared_obj, src=0)
+        return shared_obj[0]
 
 
     if not train_args.use_hyperparameter_search:
@@ -419,24 +456,10 @@ def run_classification():
             train_result = trainer.train(resume_from_checkpoint=checkpoint)
             print_rank0(train_result)
 
-            metrics = train_result.metrics
-            metrics["train_samples"] = len(train_datasets)
-            
             trainer.save_model()
-            trainer.log_metrics("train", metrics)
-            trainer.save_metrics("train", metrics)
+            log_and_save_train_metrics(trainer, train_result)
             trainer.save_state()
-            
-            final_eval_metrics = trainer.evaluate(eval_dataset=valid_datasets, metric_key_prefix="final_eval")
-            final_eval_metrics["final_eval_samples"] = len(valid_datasets)
-
-            trainer.log_metrics("final_eval", final_eval_metrics)
-            trainer.save_metrics("final_eval", final_eval_metrics)
-
-            print_rank0(f"最终评估结果: {final_eval_metrics}")
-            print_rank0("=" * 50)
-            print_rank0("最终评估完成")
-            print_rank0("=" * 50)
+            run_final_evaluation(trainer)
             
             print_rank0("=" * 50)
             print_rank0("训练完成")
@@ -476,6 +499,9 @@ def run_classification():
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
         print_rank0(f"开始超参搜索: n_trials={train_args.hp_n_trials}, backend={train_args.hp_search_backend}")
+
+        if not train_args.do_eval:
+            raise ValueError("use_hyperparameter_search=True 时必须设置 do_eval=True。")
         
         def hp_space(trial):
             return_dict = {}
@@ -497,6 +523,14 @@ def run_classification():
                         "weight_decay", float(train_args.hp_dict["weight_decay"]["hp_weight_decay_min"]), float(train_args.hp_dict["weight_decay"]["hp_weight_decay_max"])
                     )
             return return_dict
+
+        def compute_objective(metrics):
+            if train_args.hp_metric_for_best not in metrics:
+                available_metrics = ", ".join(sorted(metrics.keys()))
+                raise ValueError(
+                    f"hp_metric_for_best={train_args.hp_metric_for_best} 不在评估结果中，可用指标: {available_metrics}"
+                )
+            return metrics[train_args.hp_metric_for_best]
         
         try:
 
@@ -505,38 +539,38 @@ def run_classification():
                 backend=train_args.hp_search_backend,
                 hp_space=hp_space,
                 n_trials=train_args.hp_n_trials,
-                compute_objective=lambda metrics: metrics[train_args.hp_metric_for_best],
+                compute_objective=compute_objective,
             )
 
-            print_rank0(f"最优 trial: {best_run.run_id}")
-            print_rank0(f"最优超参: {best_run.hyperparameters}")
-            print_rank0(f"最优 {train_args.hp_metric_for_best}: {best_run.objective}")
-
-            print_rank0("用最优超参重新训练完整模型...")
-            for key, value in best_run.hyperparameters.items():
-                setattr(trainer.args, key, value)
-
-            trainer.train()
-            trainer.save_model()
-            trainer.save_state()
-            final_eval_metrics = trainer.evaluate(eval_dataset=valid_datasets, metric_key_prefix="final_eval")
-            final_eval_metrics["final_eval_samples"] = len(valid_datasets)
-
-            trainer.log_metrics("final_eval", final_eval_metrics)
-            trainer.save_metrics("final_eval", final_eval_metrics)
-
-            print_rank0(f"最终评估结果: {final_eval_metrics}")
-            print_rank0("=" * 50)
-            print_rank0("最终评估完成")
-            print_rank0("=" * 50)
-
-            hp_save_path = os.path.join(train_args.output_dir, "best_hyperparameters.json")
-            with open(hp_save_path, "w") as f:
-                json.dump({
+            best_run_payload = None
+            if best_run is not None:
+                best_run_payload = {
                     "run_id": best_run.run_id,
                     "objective": best_run.objective,
                     "hyperparameters": best_run.hyperparameters,
-                }, f, indent=2, ensure_ascii=False)
+                }
+                print_rank0(f"最优 trial: {best_run.run_id}")
+                print_rank0(f"最优超参: {best_run.hyperparameters}")
+                print_rank0(f"最优 {train_args.hp_metric_for_best}: {best_run.objective}")
+
+            best_run_payload = broadcast_from_rank0(best_run_payload)
+            if best_run_payload is None:
+                raise RuntimeError("超参搜索未返回最优结果。")
+
+            print_rank0("用最优超参重新训练完整模型...")
+            print_rank0(f"最终重训使用超参: {best_run_payload['hyperparameters']}")
+            for key, value in best_run_payload["hyperparameters"].items():
+                setattr(trainer.args, key, value)
+
+            train_result = trainer.train()
+            trainer.save_model()
+            log_and_save_train_metrics(trainer, train_result)
+            trainer.save_state()
+            run_final_evaluation(trainer)
+
+            hp_save_path = os.path.join(train_args.output_dir, "best_hyperparameters.json")
+            with open(hp_save_path, "w") as f:
+                json.dump(best_run_payload, f, indent=2, ensure_ascii=False)
             print_rank0(f"最优超参已保存到 {hp_save_path}")
         except Exception as e:
             logger.error(f"训练过程中出错: {e}")

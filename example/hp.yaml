@@ -1,5 +1,5 @@
 hp_search_backend: optuna
-hp_n_trials: 20
+hp_n_trials: 10
 hp_direction: maximize
 hp_metric_for_best: eval_f1
 

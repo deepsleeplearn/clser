@@ -1,5 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=1
+export PYTORCH_ALLOC_CONF="expandable_segments:True"
 echo "muti-gpu distribute setup script"
 echo "========================"
 
