@@ -3,6 +3,8 @@ train_file_path: "/data/private/customer_aigc/GJ/multi-class/data/single_label_d
 valid_file_path: "/data/private/customer_aigc/GJ/multi-class/data/single_label_data/valid.jsonl"
 test_file_path: null
 num_processing: 16
+use_batched_preprocess: false
+preprocess_batch_size: 1000
 train_remove_columns: ["text"]
 valid_remove_columns: ["text"]
 max_length_threshold: 128

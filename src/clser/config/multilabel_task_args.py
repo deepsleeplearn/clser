@@ -96,6 +96,20 @@ class MultiClassificationDataArguments:
         },
     )
 
+    use_batched_preprocess: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to preprocess dataset with batched map."
+        },
+    )
+
+    preprocess_batch_size: int = field(
+        default=1000,
+        metadata={
+            "help": "Batch size used when use_batched_preprocess=True."
+        },
+    )
+
     max_length_threshold: int = field(
         default=1024,
         metadata={
@@ -121,7 +135,11 @@ class MultiClassificationDataArguments:
                 raise ValueError(f"valid_file_path is not a file: {self.valid_file_path}")
             if not self.valid_file_path.endswith(".jsonl"):
                 raise ValueError(f"valid_file_path currently must end with .jsonl, but got {os.path.splitext(os.path.basename(self.valid_file_path))[1]}")
-        
+
+        if self.preprocess_batch_size <= 0:
+            raise ValueError(
+                f"preprocess_batch_size must be positive, but got {self.preprocess_batch_size}"
+            )
         
 
 @typechecked

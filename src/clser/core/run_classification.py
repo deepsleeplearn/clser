@@ -33,6 +33,7 @@ from clser.config.multilabel_task_args import (
     MultiClassificationTrainArguments,
     MultiClassificationModelArguments,
 )
+from clser.core.preprocess import build_preprocess_functions
 from clser.utils.logger import get_logger
 
 logger = get_logger()
@@ -112,107 +113,47 @@ def get_dataset(data_args: "MultiClassificationDataArguments",
             
         print_rank0(f"发现 {len(label_set)} 个唯一标签: {label_set}")
 
-        def preprocess_func(example):
-            try:
-                assert data_args.label_key in example, f"{data_args.label_key} 不在 {example.keys()} 中"
-                
-                main_text = ""
-
-                if "system" in example:
-                    system = example["system"]
-                elif data_args.system_prompt:
-                    system = data_args.system_prompt
-                else:
-                    raise ValueError("You must provide system prompt.")
-                
-                main_text += system
-
-                if "conversations" in example and "text" not in example:
-                    conversations = example["conversations"]
-                    assert isinstance(conversations, list), "conversations must be a list"
-                    l = len(conversations)
-                    if isinstance(conversations[0], str):
-                        main_text += "\n".join(conversations)
-                    elif isinstance(conversations[0], dict):
-                        assert "role" in conversations[0] and "content" in conversations[0], \
-                            "conversations must be a list of dicts with 'role' and 'content' keys"
-                        for idx, conv in enumerate(conversations):
-                            role, content = conv["role"], conv["content"]
-                            assert role in ["user", "assistant"], "role must be 'user' or 'assistant'"
-                            convert_role = "用户" if role == "user" else "客服"
-                            if idx != (l - 1):
-                                main_text += f"{convert_role}: {content}\n"
-                            else:
-                                main_text += f"{convert_role}: {content}"
-                    else:
-                        raise ValueError(f"Elements' type in conversations must be string or list.")
-                elif "text" in example and "conversations" not in example:
-                    text = example["text"]
-                    if isinstance(text, str):
-                        main_text += text
-                    elif isinstance(text, list):
-                        main_text += "".join(text)
-                    else:
-                        raise ValueError(f"Input {text} is not valid. Should be a string, or a list of strings.")
-                else:
-                    raise ValueError(
-                        "input must be a dictionary with a key 'text' or 'conversations'"
-                    )
-
-                full_text_tokens = tokenizer.encode(main_text, add_special_tokens=True)
-
-                if len(full_text_tokens) > data_args.max_length_threshold:
-                    example["skip"] = True
-                else:
-                    example["skip"] = False
-
-                result = tokenizer(
-                    main_text, 
-                    return_tensors='pt'
-                )
-                
-                for k, v in result.items():
-                    result[k] = v[0]
-
-                if isinstance(example[data_args.label_key], list):
-                    hot_encode = mlb.transform([example[data_args.label_key]])[0]
-                elif isinstance(example[data_args.label_key], str):
-                    hot_encode = mlb.transform([[example[data_args.label_key]]])[0]
-                else:
-                    raise ValueError("label_key must be list or str")
-                
-                if train_args.problem_type == "multi_label_classification":
-                    result["label"] = hot_encode.astype(np.float32).tolist()
-                elif train_args.problem_type == "single_label_classification":
-                    result["label"] = np.argmax(hot_encode)
-                else:
-                    raise ValueError(f"Unknown problem type: {train_args.problem_type}")
-                    
-                return result
-                
-            except Exception as e:
-                logger.warning(f"预处理样本时出错: {e}, 跳过该样本")
-                return {"skip": True}
+        preprocess_func, preprocess_func_batched = build_preprocess_functions(
+            data_args=data_args,
+            train_args=train_args,
+            tokenizer=tokenizer,
+            mlb=mlb,
+            logger=logger,
+        )
+        selected_preprocess_func = (
+            preprocess_func_batched if data_args.use_batched_preprocess else preprocess_func
+        )
+        base_map_kwargs = {
+            "function": selected_preprocess_func,
+            "num_proc": data_args.num_processing,
+        }
+        if data_args.use_batched_preprocess:
+            base_map_kwargs["batched"] = True
+            base_map_kwargs["batch_size"] = data_args.preprocess_batch_size
+            print_rank0(
+                f"启用批量预处理: batch_size={data_args.preprocess_batch_size}, num_proc={data_args.num_processing}"
+            )
+        else:
+            print_rank0(f"启用单样本预处理: num_proc={data_args.num_processing}")
 
         train_datasets = format_dataset["train"]
         train_datasets = train_datasets.map(
-            function=preprocess_func, 
-            num_proc=data_args.num_processing, 
+            **base_map_kwargs,
             desc="Running tokenizer on train dataset",
         )
-        
-        train_datasets = train_datasets.remove_columns(data_args.train_remove_columns)
+
+        if data_args.train_remove_columns is not None:
+            train_datasets = train_datasets.remove_columns(data_args.train_remove_columns)
 
         if data_args.shuffle:
             train_datasets = train_datasets.shuffle(seed=data_args.shuffle_seed)
 
         valid_datasets = format_dataset["valid"]
-        valid_datasets = valid_datasets.map(
-            function=preprocess_func,
-            num_proc=data_args.num_processing, 
-            desc="Running tokenizer on valid dataset",
-            remove_columns=data_args.valid_remove_columns
-        )
+        valid_map_kwargs = dict(base_map_kwargs)
+        valid_map_kwargs["desc"] = "Running tokenizer on valid dataset"
+        if data_args.valid_remove_columns is not None:
+            valid_map_kwargs["remove_columns"] = data_args.valid_remove_columns
+        valid_datasets = valid_datasets.map(**valid_map_kwargs)
 
         original_train_size = len(train_datasets)
         train_datasets = train_datasets.filter(
