@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # @Time : 2025-12-12
 # @Author : GJason
-# @File : multilabel_task_args.py
+# @File : args.py
 
 from dataclasses import dataclass, field
 from typeguard import typechecked
@@ -204,7 +204,7 @@ class MultiClassificationTrainArguments(TrainingArguments):
     )
 
     hyperparameter_config_path: str = field(
-        default="./example/hp.yaml",
+        default="./configs/classification/hp.yaml",
         metadata={
             "help": "The config path of hyperparameter search."
         }

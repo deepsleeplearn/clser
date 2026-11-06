@@ -1,0 +1,71 @@
+task: "text2text"
+
+# data_args
+train_file_path: "/data/private/customer_aigc/GJ/text2text/data/summary/train.jsonl"
+valid_file_path: "/data/private/customer_aigc/GJ/text2text/data/summary/valid.jsonl"
+test_file_path: null
+num_processing: 16
+use_batched_preprocess: false
+preprocess_batch_size: 1000
+instruction_key: "instruction"
+source_key: "input"
+target_key: "output"
+default_instruction: "请对下面这段用户与客服的对话进行总结，提炼用户诉求和处理结果。"
+system_prompt: "你是一个实用小助手。"
+prompt_template: "{instruction}\n{input}"
+use_chat_template: true
+enable_thinking: false
+max_source_length: 1024
+max_target_length: 256
+max_length_threshold: 1280
+
+
+# model_args
+model_name_or_path: "/data/team/llm/Qwen3-1.7B"
+model_type: "causal_lm"
+trust_remote_code: true
+
+
+# train_args
+output_dir: "../../output_text2text/"
+overwrite_output_dir: true
+do_train: true
+do_eval: true
+eval_strategy: "steps"
+eval_steps: 50
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 8
+num_train_epochs: 2
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.05
+save_strategy: "steps"
+save_steps: 50
+save_total_limit: 2
+metric_for_best_model: "loss"
+optim: "adamw_torch"
+report_to: "none"
+dataloader_pin_memory: true
+remove_unused_columns: false
+fsdp: "auto_wrap"
+fsdp_config:
+  state_dict_type: "FULL_STATE_DICT"
+bf16: true
+log_level: "info"
+logging_steps: 10
+logging_dir: "./log/"
+learning_rate: 0.00002
+save_only_model: true
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+attn_implementation: "sdpa"
+predict_with_generate: false
+
+do_generation_eval: true
+gen_eval_max_samples: 500
+gen_eval_batch_size: 8
+gen_max_new_tokens: 256
+gen_num_beams: 1
+measures: ["rouge1", "rouge2", "rougeL", "bleu"]
+metric_tokenize: "char"

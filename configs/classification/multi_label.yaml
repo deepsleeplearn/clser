@@ -1,3 +1,5 @@
+task: "classification"
+
 #data_args
 train_file_path: "/data/private/customer_aigc/GJ/cls/data/260331/train.jsonl"
 valid_file_path: "/data/private/customer_aigc/GJ/cls/data/260331/self_define_valid.jsonl"

@@ -1,3 +1,5 @@
+task: "classification"
+
 #data_args
 train_file_path: "/data/private/customer_aigc/GJ/multi-class/data/single_label_data/train.jsonl"
 valid_file_path: "/data/private/customer_aigc/GJ/multi-class/data/single_label_data/valid.jsonl"

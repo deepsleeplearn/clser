@@ -1,4 +1,4 @@
-[bulid-system]
+[build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
@@ -11,8 +11,21 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{name = "guojian"}]
 dependencies = [
-    "transformers>=4.55"
+    "transformers>=4.55",
+    "torch",
+    "datasets",
+    "evaluate",
+    "scikit-learn",
+    "numpy",
+    "pyyaml",
+    "typeguard",
 ]
+
+[project.optional-dependencies]
+hp = ["optuna"]
+
+[project.scripts]
+clser = "clser.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -20,12 +33,6 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["clser*"]
-
-[tool.pytest.ini_options]
-minversion = "7.0"
-testpaths = ["tests"]
-pythonpath = ["src"]
-addopts = "-q"
 
 [tool.ruff]
 line-length = 100

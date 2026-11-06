@@ -2,15 +2,11 @@
 # -*- coding: utf-8 -*-
 # @Time : 2026-04-02
 # @Author : GJason
-# @File : run_classification.py
+# @File : run.py
 
 import torch
 import os
-import sys
 import json
-import yaml
-import torch.nn as nn
-from datasets import load_dataset, DatasetDict
 from sklearn.preprocessing import MultiLabelBinarizer
 import numpy as np
 from transformers import (
@@ -19,53 +15,24 @@ from transformers import (
     AutoConfig,
     EvalPrediction,
     Trainer,
-    HfArgumentParser,
     default_data_collator,
     DataCollatorWithPadding,
     set_seed
 )
-from transformers.trainer_utils import get_last_checkpoint
 import evaluate
-import torch.distributed as dist
-import torch.nn.functional as F
-from clser.config.multilabel_task_args import (
+from clser.common.distributed import setup_distributed, print_rank0, broadcast_from_rank0, cleanup_distributed
+from clser.common.args import parse_yaml_args
+from clser.common.data import load_json_splits, filter_skipped
+from clser.common.trainer_utils import resolve_checkpoint, save_train_result, final_evaluate, banner
+from clser.tasks.classification.args import (
     MultiClassificationDataArguments,
     MultiClassificationTrainArguments,
     MultiClassificationModelArguments,
 )
-from clser.core.preprocess import build_preprocess_functions
+from clser.tasks.classification.preprocess import build_preprocess_functions
 from clser.utils.logger import get_logger
 
 logger = get_logger()
-
-
-def setup_distributed():
-    
-    if "LOCAL_RANK" in os.environ:
-        local_rank = int(os.environ["LOCAL_RANK"])
-        world_size = int(os.environ.get("WORLD_SIZE", 1))
-        rank = int(os.environ.get("RANK", 0))
-
-        torch.cuda.set_device(local_rank)
-        
-        if not dist.is_initialized():
-            dist.init_process_group(
-                backend="nccl",
-                init_method="env://",
-                world_size=world_size,
-                rank=rank,
-                device_id=torch.device(f"cuda:{local_rank}")
-            )
-            logger.info(f"Initialized process group: rank={rank}, world_size={world_size}, local_rank={local_rank}")
-        
-        return local_rank, rank, world_size
-    else:
-        return 0, 0, 1
-
-
-def print_rank0(info):
-    if not dist.is_initialized() or dist.get_rank() == 0:
-        logger.info(info)
 
 
 def get_dataset(data_args: "MultiClassificationDataArguments", 
@@ -79,18 +46,7 @@ def get_dataset(data_args: "MultiClassificationDataArguments",
     
     with train_args.main_process_first(desc="pre-process dataset", local=True):
         
-        try:
-            train_dataset = load_dataset("json", data_files=data_args.train_file_path)
-            valid_dataset = load_dataset("json", data_files=data_args.valid_file_path)
-        except Exception as e:
-            logger.error(f"加载数据集失败: {e}")
-            raise
-
-        format_dataset = DatasetDict({
-            "train": train_dataset["train"],
-            "valid": valid_dataset["train"]
-        })
-
+        format_dataset = load_json_splits(data_args.train_file_path, data_args.valid_file_path)
 
         label_set = set()
         if train_args.problem_type == "multi_label_classification":
@@ -155,23 +111,8 @@ def get_dataset(data_args: "MultiClassificationDataArguments",
             valid_map_kwargs["remove_columns"] = data_args.valid_remove_columns
         valid_datasets = valid_datasets.map(**valid_map_kwargs)
 
-        original_train_size = len(train_datasets)
-        train_datasets = train_datasets.filter(
-            function=lambda x: not x.get("skip", False), 
-            num_proc=data_args.num_processing
-        )
-        filtered_train_size = len(train_datasets)
-        train_datasets = train_datasets.remove_columns(["skip"])
-        print_rank0(f"训练集过滤: {original_train_size} -> {filtered_train_size} (跳过 {original_train_size - filtered_train_size} 个超长样本)")
-
-        original_valid_size = len(valid_datasets)
-        valid_datasets = valid_datasets.filter(
-            function=lambda x: not x.get("skip", False), 
-            num_proc=data_args.num_processing
-        )
-        filtered_valid_size = len(valid_datasets)
-        valid_datasets = valid_datasets.remove_columns(["skip"])
-        print_rank0(f"验证集过滤: {original_valid_size} -> {filtered_valid_size} (跳过 {original_valid_size - filtered_valid_size} 个超长样本)")
+        train_datasets = filter_skipped(train_datasets, "训练集", data_args.num_processing)
+        valid_datasets = filter_skipped(valid_datasets, "验证集", data_args.num_processing)
 
         train_shape = np.array(train_datasets["label"]).shape
         print_rank0(f"训练集标签维度: {train_shape}") 
@@ -205,31 +146,17 @@ def get_model(config: "AutoConfig",
     except Exception as e:
         logger.error(f"加载模型失败: {e}")
         raise
-        
 
 
-def get_args(args_file: str):
-    hf_parser = HfArgumentParser((
-        MultiClassificationDataArguments, 
-        MultiClassificationModelArguments, 
-        MultiClassificationTrainArguments
-    ))
-    with open(args_file, 'r', encoding='utf-8') as f:
-        yaml_dict = yaml.safe_load(f)
-    data_args, model_args, train_args = hf_parser.parse_dict(yaml_dict)
-    return data_args, model_args, train_args
-
-
-def run_classification():
+def run_classification(yaml_path: str):
     
     local_rank, rank, world_size = setup_distributed()
     print_rank0(f"Starting training on {world_size} GPU(s)")
-    
-    yaml_path = sys.argv[1]
-    assert os.path.exists(yaml_path) and os.path.isfile(yaml_path), \
-        f"yaml_path does not exist: {yaml_path}"
 
-    data_args, model_args, train_args = get_args(yaml_path)
+    data_args, model_args, train_args = parse_yaml_args(
+        yaml_path,
+        (MultiClassificationDataArguments, MultiClassificationModelArguments, MultiClassificationTrainArguments),
+    )
     
     if train_args.seed is not None:
         set_seed(train_args.seed)
@@ -328,39 +255,6 @@ def run_classification():
     else:
         data_collator = default_data_collator
 
-    def log_and_save_train_metrics(trainer: Trainer, train_result):
-        metrics = train_result.metrics
-        metrics["train_samples"] = len(train_datasets)
-        trainer.log_metrics("train", metrics)
-        trainer.save_metrics("train", metrics)
-        return metrics
-
-    def run_final_evaluation(trainer: Trainer):
-        if not train_args.do_eval:
-            print_rank0("跳过最终评估: do_eval=False")
-            return None
-
-        final_eval_metrics = trainer.evaluate(eval_dataset=valid_datasets, metric_key_prefix="final_eval")
-        final_eval_metrics["final_eval_samples"] = len(valid_datasets)
-
-        trainer.log_metrics("final_eval", final_eval_metrics)
-        trainer.save_metrics("final_eval", final_eval_metrics)
-
-        print_rank0(f"最终评估结果: {final_eval_metrics}")
-        print_rank0("=" * 50)
-        print_rank0("最终评估完成")
-        print_rank0("=" * 50)
-        return final_eval_metrics
-
-    def broadcast_from_rank0(obj):
-        if not dist.is_initialized():
-            return obj
-
-        shared_obj = [obj if dist.get_rank() == 0 else None]
-        dist.broadcast_object_list(shared_obj, src=0)
-        return shared_obj[0]
-
-
     if not train_args.use_hyperparameter_search:
         model = get_model(config, model_args, local_rank)
 
@@ -375,50 +269,25 @@ def run_classification():
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
 
-        last_checkpoint = None
-        if os.path.isdir(train_args.output_dir) and train_args.do_train and not train_args.overwrite_output_dir:
-            last_checkpoint = get_last_checkpoint(train_args.output_dir)
-            if last_checkpoint is not None:
-                print_rank0(f"发现checkpoint: {last_checkpoint}")
-        
-        checkpoint = None
-        if train_args.resume_from_checkpoint is not None:
-            checkpoint = train_args.resume_from_checkpoint
-            print_rank0(f"从指定checkpoint恢复: {checkpoint}")
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
-            print_rank0(f"从最新checkpoint恢复: {checkpoint}")
+        checkpoint = resolve_checkpoint(train_args)
 
         try:
-            print_rank0("=" * 50)
-            print_rank0("开始训练")
-            print_rank0("=" * 50)
+            banner("开始训练")
             
             train_result = trainer.train(resume_from_checkpoint=checkpoint)
             print_rank0(train_result)
 
-            trainer.save_model()
-            log_and_save_train_metrics(trainer, train_result)
-            trainer.save_state()
-            run_final_evaluation(trainer)
+            save_train_result(trainer, train_result, len(train_datasets))
+            final_evaluate(trainer, valid_datasets)
             
-            print_rank0("=" * 50)
-            print_rank0("训练完成")
-            print_rank0("=" * 50)
+            banner("训练完成")
             
         except Exception as e:
             logger.error(f"训练过程中出错: {e}")
             raise
         
         finally:
-            if dist.is_initialized():
-                try:
-                    print_rank0("清理分布式资源...")
-                    dist.barrier()
-                    dist.destroy_process_group()
-                    logger.info("清理完成")
-                except Exception as e:
-                    logger.warning(f"清理过程中出现警告: {e}")
+            cleanup_distributed()
     else:
 
         def model_init(trial=None):
@@ -504,10 +373,8 @@ def run_classification():
                 setattr(trainer.args, key, value)
 
             train_result = trainer.train()
-            trainer.save_model()
-            log_and_save_train_metrics(trainer, train_result)
-            trainer.save_state()
-            run_final_evaluation(trainer)
+            save_train_result(trainer, train_result, len(train_datasets))
+            final_evaluate(trainer, valid_datasets)
 
             hp_save_path = os.path.join(train_args.output_dir, "best_hyperparameters.json")
             with open(hp_save_path, "w") as f:
@@ -517,9 +384,4 @@ def run_classification():
             logger.error(f"训练过程中出错: {e}")
             raise
         finally:
-            if dist.is_initialized():
-                try:
-                    dist.barrier()
-                    dist.destroy_process_group()
-                except Exception as e:
-                    logger.warning(f"清理过程中出现警告: {e}")
+            cleanup_distributed()

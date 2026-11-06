@@ -1,0 +1,68 @@
+task: "rerank"
+
+# data_args
+train_file_path: "/data/private/customer_aigc/GJ/rerank/data/train.jsonl"
+valid_file_path: "/data/private/customer_aigc/GJ/rerank/data/valid.jsonl"
+test_file_path: null
+num_processing: 16
+query_key: "query"
+pos_key: "pos"
+neg_key: "neg"
+instruction_key: "prompt"
+default_instruction: "给定一个客服场景的用户问题，检索能够回答该问题的知识库条目。"
+system_prompt: ""
+enable_thinking: false
+train_group_size: 8
+eval_group_size: 8
+neg_sample_seed: 42
+max_query_length: 64
+max_passage_length: 512
+max_length_threshold: 1024
+
+
+# model_args
+model_name_or_path: "/data/team/llm/Qwen3-Reranker-0.6B"
+model_type: "llm"
+yes_token: "yes"
+no_token: "no"
+trust_remote_code: true
+
+
+# train_args
+output_dir: "../../output_rerank_llm/"
+overwrite_output_dir: true
+do_train: true
+do_eval: true
+eval_strategy: "steps"
+eval_steps: 100
+per_device_train_batch_size: 2
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 8
+num_train_epochs: 1
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.05
+save_strategy: "steps"
+save_steps: 100
+save_total_limit: 2
+metric_for_best_model: "mrr"
+greater_is_better: true
+optim: "adamw_torch"
+report_to: "none"
+dataloader_pin_memory: true
+remove_unused_columns: false
+fsdp: "auto_wrap"
+fsdp_config:
+  state_dict_type: "FULL_STATE_DICT"
+bf16: true
+log_level: "info"
+logging_steps: 10
+logging_dir: "./log/"
+learning_rate: 0.00001
+save_only_model: true
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+attn_implementation: "sdpa"
+loss_type: "listwise"
+temperature: 1.0
+measures: ["accuracy", "mrr", "ndcg"]

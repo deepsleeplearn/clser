@@ -1,0 +1,59 @@
+task: "rerank"
+
+# data_args
+train_file_path: "/data/private/customer_aigc/GJ/rerank/data/train.jsonl"
+valid_file_path: "/data/private/customer_aigc/GJ/rerank/data/valid.jsonl"
+test_file_path: null
+num_processing: 16
+use_batched_preprocess: false
+preprocess_batch_size: 1000
+query_key: "query"
+pos_key: "pos"
+neg_key: "neg"
+train_group_size: 8
+eval_group_size: 8
+neg_sample_seed: 42
+max_query_length: 64
+max_passage_length: 448
+max_length_threshold: 512
+
+
+# model_args
+model_name_or_path: "/data/team/llm/bge-reranker-v2-m3"
+model_type: "cross_encoder"
+trust_remote_code: false
+
+
+# train_args
+output_dir: "../../output_rerank/"
+overwrite_output_dir: true
+do_train: true
+do_eval: true
+eval_strategy: "steps"
+eval_steps: 100
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 8
+gradient_accumulation_steps: 4
+num_train_epochs: 2
+lr_scheduler_type: "linear"
+warmup_ratio: 0.05
+save_strategy: "steps"
+save_steps: 100
+save_total_limit: 2
+metric_for_best_model: "mrr"
+greater_is_better: true
+optim: "adamw_torch"
+report_to: "none"
+dataloader_pin_memory: true
+remove_unused_columns: false
+bf16: true
+log_level: "info"
+logging_steps: 20
+logging_dir: "./log/"
+learning_rate: 0.00002
+weight_decay: 0.01
+save_only_model: true
+attn_implementation: "sdpa"
+loss_type: "listwise"
+temperature: 1.0
+measures: ["accuracy", "mrr", "ndcg"]

@@ -1,59 +1,45 @@
 ## 介绍
 ![演示图](assets/clser.png)
-基于大模型的文本分类训练框架，同时支持单标签和多标签分类。
+基于 Transformers 的小模型训练框架，目前支持三类任务：
+
+| 任务 | task 名 | 说明 | 文档 |
+|:---:|:---:|:---|:---:|
+| 文本分类 | `classification` | 单标签 / 多标签分类，支持超参搜索 | [docs/classification.md](docs/classification.md) |
+| 文本生成 | `text2text` | 摘要、总结、翻译等文本到文本任务，支持解码器和编码器-解码器模型 | [docs/text2text.md](docs/text2text.md) |
+| 重排序 | `rerank` | cross-encoder 与 LLM 两种 reranker，listwise / pointwise 损失 | [docs/rerank.md](docs/rerank.md) |
 
 ## 准备工作
 ```shell
 cd clser && pip install -e .
 ```
+需要超参搜索时安装 `pip install -e ".[hp]"`。
 
-## 输入数据说明
-### 两种模式
-#### 对话模式
-输入数据为对话形式
-##### 格式1
-|      键名    |    类型 |  说明   | 示例 |
-|:-----------:|:----------:|:-------:|:-----:|
-|system|str|系统提示词|你是一个实用小助手|
-|conversations|list[str]|交替的以"用户"、"客服"开头的对话内容|["用户: 你好", "客服: 您好，很高兴为您服务，请问是冰箱需要维修吗？", "用户: 是的，冰箱不制冷"]|
-|labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
+## 运行
+统一入口为 `python -m clser`（安装后也可直接用 `clser` 命令），第一个参数是任务名，第二个是 yaml 配置：
+```shell
+python -m clser classification configs/classification/multi_label.yaml
+python -m clser text2text configs/text2text/causal_lm.yaml
+python -m clser rerank configs/rerank/cross_encoder.yaml
+```
+yaml 中带 `task` 字段时可以省略任务名：`python -m clser configs/rerank/llm.yaml`。
 
-##### 格式2
-|      键名    |    类型 |  说明   | 示例 |
-|:-----------:|:----------:|:-------:|:-----:|
-|system|str|系统提示词|你是一个实用小助手|
-|conversations|dict[str, Any]|交替的以"用户"、"客服"开头的对话内容，对话格式为有键role、content的dict|[{"role": "user", "content": 你好"}, {"role": "assistant", "content": "您好，很高兴为您服务，请问是冰箱需要维修吗？"}, {"role": "user", "content": "是的，冰箱不制冷"}]|
-|labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
+多卡训练用启动脚本，GPU 不传时会交互输入，10 秒超时后使用全部 8 卡：
+```shell
+bash scripts/run.sh rerank configs/rerank/cross_encoder.yaml 0,1,2,3
+```
 
-#### 文本模式
-##### 格式3
-|      键名    |    类型 |  说明   | 示例 |
-|:-----------:|:----------:|:-------:|:-----:|
-|system|str|系统提示词|你是一个实用小助手|
-|text|str|主体文本|"用户：你好。\n客服：您好，很高兴为您服务，请问是冰箱需要维修吗？\n用户：是的，冰箱不制冷"|
-|labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
-
-##### 格式4
-|      键名    |    类型 |  说明   | 示例 |
-|:-----------:|:----------:|:-------:|:-----:|
-|system|str|系统提示词|你是一个实用小助手|
-|text|str|主体文本|["用户：你好。", "客服：您好，很高兴为您服务，请问是冰箱需要维修吗？", "用户：是的，冰箱不制冷"]|
-|labels|list[str]|文本对应的标签|["抽取品牌品类", "诉求分类"]|
-
-### 说明
-1. 标签名可以不强制labels，但是要在 **args.yaml** 中设置标签名与数据中一致；
-2. 格式 1 中，system、conversations使用换行符"\n"进行join；而格式 4 中，system、text直接使用""进行join；
-
-
-## 运行脚本
-
-### multi_args.yaml
-#### 路径
-clser/example/multi_args.yaml
-#### 说明
-这里设置一下训练配置
-
-### multi_run.sh
-#### 路径
-clser/tests/multi_run.sh
-直接bash 该shell文件
+## 目录结构
+```
+src/clser/
+├── cli.py                 统一入口，按任务名分发
+├── common/                三个任务共用：分布式初始化、yaml 参数解析、数据加载过滤、checkpoint 与评估
+├── tasks/
+│   ├── classification/    args.py  preprocess.py  run.py
+│   ├── text2text/         args.py  preprocess.py  metrics.py  run.py
+│   └── rerank/            args.py  preprocess.py  trainer.py  run.py
+└── utils/logger.py
+configs/<task>/            各任务训练配置
+scripts/run.sh             torchrun 多卡启动脚本
+docs/                      各任务的数据格式与参数说明
+```
+新增任务时在 `tasks/` 下建一个目录，提供参数类、预处理和 `run_<task>(yaml_path)` 函数，再在 `cli.py` 的 `TASKS` 中注册即可。
