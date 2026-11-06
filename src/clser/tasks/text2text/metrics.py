@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Time : 2026-11-06
+# @Time : 2026-02-03
 # @Author : GJason
 # @File : metrics_text2text.py
 
